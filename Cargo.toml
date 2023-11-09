@@ -1,0 +1,15 @@
+[package]
+name = "restful-cache"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+# List your dependencies here. For example:
+tokio = { version = "1", features = ["full"] }
+reqwest = "0.11"
+anyhow = "1.0"
+log = "0.4"
+
+[lib]
+name = "restful_cache"
+path = "src/lib.rs"
