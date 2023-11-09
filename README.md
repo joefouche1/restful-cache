@@ -14,6 +14,17 @@ Whether you're building a web server, a microservice, or a CLI tool, restful-cac
 
 Please see the Usage section for examples on how to use restful-cache in your Rust applications.
 
+# Installation
+
+```
+[dependencies]
+restful-cache = { git = "https://github.com/joefouche1/restful-cache.git" }
+```
+Then, in your Rust files, you can use the library like this:
+
+```rust
+use restful_cache::Cache;
+```
 
 # Quickstart
 
