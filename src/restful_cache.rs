@@ -1,3 +1,4 @@
+// Importing necessary libraries and modules
 use std::hash::Hash;
 use std::time::{Instant, Duration};
 use std::collections::HashMap;
@@ -9,29 +10,32 @@ use tokio::sync::{mpsc,RwLock};
 use reqwest::Client;
 use anyhow::Error;
 
+// Defining the RESTfulCache struct
 pub struct RESTfulCache<K, V, F> 
 where 
-    K: 'static + Eq + Hash + Debug, 
-    V: 'static + Send + Sync,
-    F: 'static + Send + Sync + Fn(K, &Client) -> Pin<Box<dyn Future<Output = Result<V, Error>> + Send>>,
+    K: 'static + Eq + Hash + Debug, // Key must implement these traits
+    V: 'static + Send + Sync, // Value must implement these traits
+    F: 'static + Send + Sync + Fn(K, &Client) -> Pin<Box<dyn Future<Output = Result<V, Error>> + Send>>, // Fetch function type
 {
-    responses: HashMap<K, V>,
-    fetched_at: HashMap<K, Instant>,
-    time_to_live: Duration,
-    fetch: F,
-    sender: mpsc::Sender<(K, V)>,
-    client: Client, 
+    responses: HashMap<K, V>, // Cache for responses
+    fetched_at: HashMap<K, Instant>, // Timestamps for when each key was fetched
+    time_to_live: Duration, // Duration for which a response is considered fresh
+    fetch: F, // Function to fetch a value for a key
+    sender: mpsc::Sender<(K, V)>, // Sender for the channel to update cache
+    client: Client, // HTTP client
 }
 
+// Implementing methods for RESTfulCache
 impl<K, V, F> RESTfulCache<K, V, F> 
 where 
-    K: 'static + Eq + Hash + Clone + Send + Sync + Debug, 
-    V: 'static + Send + Sync + Clone,
-    F: 'static + Send + Sync + Fn(K, &Client) -> Pin<Box<dyn Future<Output = Result<V, Error>> + Send>>,
+    K: 'static + Eq + Hash + Clone + Send + Sync + Debug, // Key must implement these traits
+    V: 'static + Send + Sync + Clone, // Value must implement these traits
+    F: 'static + Send + Sync + Fn(K, &Client) -> Pin<Box<dyn Future<Output = Result<V, Error>> + Send>>, // Fetch function type
 {   
+    // Constructor for RESTfulCache
     pub fn new(time_to_live: Duration, fetch: F) -> Arc<RwLock<Self>> {
-        let (tx, mut rx) = mpsc::channel(100);
-        let client = reqwest::Client::new();  // Add this line
+        let (tx, mut rx) = mpsc::channel(100); // Creating a channel for cache updates
+        let client = reqwest::Client::new();  // Creating a new HTTP client
         let cache = Arc::new(RwLock::new(Self { 
             responses: HashMap::new(), 
             fetched_at: HashMap::new(), 
@@ -42,6 +46,7 @@ where
         }));
 
         let cache_clone = Arc::clone(&cache);
+        // Spawning a new task to listen for cache updates
         tokio::spawn(async move {
             while let Some((key, value)) = rx.recv().await {
                 let mut cache = cache_clone.write().await;
@@ -52,6 +57,7 @@ where
         cache
     }
 
+    // Method to get a value for a key
     pub async fn get(&self, key: K) -> Result<V, Error> {
         let now = Instant::now();
         let should_fetch = self.should_fetch(&key, now).await;
@@ -61,6 +67,7 @@ where
             return Ok(self.responses.get(&key).unwrap().clone());
         } 
 
+        // Fetching a new value if necessary
         match (self.fetch)(key.clone(), &self.client).await {
             Ok(value) => {
                 self.sender.send((key.clone(), value.clone())).await.unwrap();
@@ -70,12 +77,14 @@ where
         }
     }
 
+    // Method to set a value for a key
     pub async fn set(&mut self, key: K, value: V) {
         let now = Instant::now();
         self.responses.insert(key.clone(), value);
         self.fetched_at.insert(key, now);
     }
 
+    // Method to check whether or not a value should be fetched
     pub async fn should_fetch(&self, key: &K, now: Instant) -> bool {
         let two_ttl_ago = now - 2 * self.time_to_live;
         let fetched_at = self.fetched_at.get(key).unwrap_or(&two_ttl_ago);
